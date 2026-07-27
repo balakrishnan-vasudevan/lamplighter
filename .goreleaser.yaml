@@ -1,0 +1,42 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    binary: lamplighter
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - name: lamplighter
+    repository:
+      owner: balakrishnan-vasudevan
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/balakrishnan-vasudevan/lamplighter
+    description: Stream logs from multiple Kubernetes pods side by side in your terminal
+    license: Apache-2.0
+    install: |
+      bin.install "lamplighter"
+    test: |
+      system "#{bin}/lamplighter", "--help"
+
+release:
+  github:
+    owner: balakrishnan-vasudevan
+    name: lamplighter
