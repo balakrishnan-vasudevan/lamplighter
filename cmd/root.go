@@ -33,7 +33,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.Flags().StringArrayVar(&pods, "pod", nil, "namespace/pod-name[:container] — repeatable (can also pass pods as positional args)")
+	rootCmd.Flags().StringArrayVar(&pods, "pod", nil, "namespace/pod-name[:container], repeatable (can also pass pods as positional args)")
 	rootCmd.Flags().StringVar(&filter, "filter", "", "regex filter applied to all columns")
 	rootCmd.Flags().IntVar(&tail, "tail", 0, "show last N lines on start (0 = follow from now)")
 	rootCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig (default: $KUBECONFIG or ~/.kube/config)")
@@ -48,7 +48,7 @@ func Execute() {
 func run(_ *cobra.Command, args []string) error {
 	allArgs := append(pods, args...)
 	if len(allArgs) == 0 {
-		return fmt.Errorf("at least one target required — e.g. lamplighter namespace/pod-name")
+		return fmt.Errorf("at least one target required, e.g. lamplighter namespace/pod-name")
 	}
 
 	var filterRe *regexp.Regexp

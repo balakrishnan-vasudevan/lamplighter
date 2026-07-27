@@ -1,95 +1,126 @@
 # Lamplighter
 
-> *A light in dark places*
-
-Stream logs from multiple Kubernetes pods and namespaces simultaneously, displayed in side-by-side columns in your terminal.
+Stream Kubernetes pod logs, events, and ingress side by side with synchronized time travel across all columns.
 
 ## What it does
 
-- Multiple pods side-by-side in one terminal window
-- Per-column color coding and status indicators
-- Log level highlighting (ERROR in red, WARN in amber)
-- Regex filter applied across all columns
-- Automatic reconnect on stream failure with exponential backoff
-- Pause, focus, and reconnect individual columns via keyboard
+When something breaks in production you end up with several terminals open: one tailing pod logs, one watching events, one in the ingress. You jump between them trying to reconstruct a timeline. Lamplighter puts all of that in one view.
+
+The key feature is synchronized scrolling. When you scroll back in time, every column moves to the same timestamp. You see a consistent snapshot of your entire system at a single point in time.
 
 ## Install
 
+Build from source:
+
 ```bash
-go install github.com/balakrishnan-vasudevan/lamplighter@latest
+git clone https://github.com/balakrishnan-vasudevan/lamplighter.git
+cd lamplighter
+go build -o lamplighter .
 ```
 
-Or build from source:
+Or with `go install`:
 
 ```bash
-make build
-./lamplighter --help
+go install github.com/balakrishnan-vasudevan/lamplighter@latest
 ```
 
 ## Usage
 
 ```bash
 # Two pods side by side
-lamplighter --pod frontend/api-pod-abc --pod backend/worker-pod-xyz
+lamplighter default/api-pod backend/worker
 
-# Specific container within a pod
-lamplighter --pod frontend/api-pod-abc:nginx --pod backend/worker-pod-xyz:app
+# Specific container
+lamplighter default/api-pod:nginx
 
-# Filter logs matching a regex across all columns
-lamplighter --pod frontend/api-pod-abc --pod backend/worker-pod-xyz --filter "error|warn"
+# All pods matching a label selector (adapts live as pods are created/deleted)
+lamplighter default:selector:app=api
 
-# Tail last 100 lines on start, then follow
-lamplighter --pod frontend/api-pod-abc --pod backend/worker-pod-xyz --tail 100
+# Kubernetes events for a namespace
+lamplighter default:events
 
-# Custom kubeconfig
-lamplighter --pod default/my-pod --kubeconfig ~/.kube/staging-config
+# Ingress controller logs (auto-discovers nginx, traefik, kong, istio)
+lamplighter default:ingress
+
+# Custom ingress selector
+lamplighter default:ingress:app=my-ingress
+
+# Mix anything together
+lamplighter default/api-pod default:selector:app=worker default:events
+
+# Filter, tail, custom kubeconfig
+lamplighter default/api-pod --filter "error|warn" --tail 100 --kubeconfig ~/.kube/staging
 ```
+
+### Argument formats
+
+| Format | What it streams |
+|--------|----------------|
+| `namespace/pod-name` | Single pod |
+| `namespace/pod-name:container` | Specific container in a pod |
+| `namespace:selector:label=value` | All pods matching the selector |
+| `namespace:events` | Kubernetes events for the namespace |
+| `namespace:ingress` | Ingress controller logs (auto-discovered) |
+| `namespace:ingress:label=value` | Ingress controller with explicit selector |
 
 ## Keyboard controls
 
 | Key | Action |
 |-----|--------|
-| `Tab` / `→` | Move cursor to next column |
-| `←` | Move cursor to previous column |
-| `p` | Pause / unpause cursor column |
-| `f` | Focus cursor column full-screen (press again to exit) |
-| `r` | Reconnect cursor column (useful when status shows Dead) |
+| `Tab` / `->` | Next column |
+| `<-` | Previous column |
+| `p` | Pause / unpause column |
+| `f` | Focus column full-screen |
+| `r` | Reconnect a dead or stuck column |
+| `Up` | Scroll back in time (all columns move together) |
+| `Down` | Scroll forward |
+| `g` | Jump to oldest line in buffer |
+| `G` | Return to live |
+| `/` | Search (regex, matches as you type) |
+| `Enter` | Lock search |
+| `Esc` | Clear search |
 | `?` | Toggle keyboard help |
 | `q` / `Ctrl+C` | Quit |
 
-## Column header
-
-Each column header shows:
+## Column status
 
 ```
-● api-pod-abc (ns:frontend) ◀
+● api-pod (ns:default) <
 ```
 
-- `●` green = streaming, `○` amber = reconnecting, `✕` red = dead
-- `◀` marks the currently selected column (keyboard target)
-- `[PAUSED]` appears when the column's scroll is frozen
+- `●` green: streaming
+- `○` amber: reconnecting
+- `x` red: dead (press `r` to reconnect)
+- `<` marks the focused column
+
+## Log parsing
+
+Plain text logs work as-is. JSON logs are detected automatically. The message, level, and timestamp are extracted regardless of which field names your logger uses (zap, logrus, structlog, and others all differ). Stack traces and multi-line output are folded under their parent line with a `(+N)` indicator.
+
+## Search
+
+Press `/` to open search. Matching lines stay bright, the rest dims. Matches against the display text, the raw log line, all parsed JSON fields, and stack trace lines. Searching for a trace ID finds the right line even if it was buried inside a JSON blob.
 
 ## Architecture
 
 ```
 CLI (cobra)
-  └─ App (orchestrator, root context)
-       ├─ StreamManager — one goroutine per column
-       │    └─ k8s log stream → filter → RingBuffer (1000 lines, circular)
-       └─ Renderer (bubbletea, 100ms tick)
-            └─ reads RingBuffer snapshots → draws columns
+  └─ App
+       ├─ Manager: one goroutine per column
+       │    ├─ Log: k8s log stream -> parse -> RingBuffer
+       │    ├─ Selector: pod Watch -> one log goroutine per pod -> RingBuffer
+       │    ├─ Events: k8s event Watch -> RingBuffer
+       │    └─ Ingress: discover controller -> log stream -> RingBuffer
+       └─ UI (bubbletea, 100ms tick)
+            └─ reads RingBuffer snapshots -> renders columns
 ```
 
-Key design properties:
+Each column owns a ring buffer (1000 lines). The UI reads a snapshot every 100ms. Streaming goroutines write independently and never block on the UI.
 
-- **RingBuffer** — goroutine-safe circular buffer per column; renderer always reads the last N lines where N = terminal height. Old lines are silently evicted.
-- **Reconnect with backoff** — exponential backoff from 1s to 30s; after 8 failures the column is marked Dead. Press `r` to restart the stream.
-- **Zero-copy rendering** — renderer reads a snapshot of the buffer every 100ms; streaming goroutines never block on the UI.
-- **Graceful shutdown** — cancelling the root context stops all streaming goroutines; bubbletea cleans up the terminal.
+Selector columns run a pod Watch in addition to the log streams. When a pod appears, a new log goroutine starts. When a pod is deleted, its goroutine is cancelled. All pod goroutines write into the same column buffer.
 
-## Tech stack
+Exponential backoff on stream failure: 1s to 30s, resets on success. After 8 failures the column is marked dead.
 
-- [`client-go`](https://github.com/kubernetes/client-go) — Kubernetes API streaming
-- [`bubbletea`](https://github.com/charmbracelet/bubbletea) — TUI framework
-- [`lipgloss`](https://github.com/charmbracelet/lipgloss) — terminal styling
-- [`cobra`](https://github.com/spf13/cobra) — CLI
+## License
+
+MIT

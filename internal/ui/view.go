@@ -247,7 +247,7 @@ func statusIcon(s column.Status) (raw, styled string) {
 
 func helpView() string {
 	lines := []string{
-		"  Lamplighter — Keyboard Controls",
+		"  Lamplighter - Keyboard Controls",
 		"",
 		"  Tab / →     next column",
 		"  ←           previous column",
@@ -260,7 +260,7 @@ func helpView() string {
 		"  g           jump to oldest line in buffer",
 		"  G           return to live",
 		"",
-		"  /           open search — type a regex or string",
+		"  /           open search - type a regex or string",
 		"              matching lines stay bright, rest dims",
 		"  Enter       lock search and close input",
 		"  Esc         clear search",
