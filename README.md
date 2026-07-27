@@ -8,17 +8,11 @@ When something breaks in production you end up with several terminals open: one 
 
 The key feature is synchronized scrolling. When you scroll back in time, every column moves to the same timestamp. You see a consistent snapshot of your entire system at a single point in time.
 
-![Four pods streaming side by side](images/image1.png)
-*Four columns streaming simultaneously — proxy-pod (nginx), backend log-generator showing slow query warnings, frontend log-generator showing processed requests, and kindnet from kube-system. All updating live in a single terminal.*
+![Multiple pods streaming side by side](images/image1.png)
+*Streaming proxy-pod (nginx), backend log-generator showing slow query warnings, frontend log-generator showing processed requests, and kindnet from kube-system — all in one terminal.*
 
 ![Label selector with events](images/image2.png)
-*Left column streams logs from all 6 pods in the zulu deployment via label selector, each line prefixed with the pod identifier. Right column shows the Kubernetes events feed — scheduled, pulled, created, started — as the deployment scaled up from 0 to 6 replicas.*
-
-![Four pods streaming side by side](images/image1.png)
-*Four columns streaming simultaneously — proxy-pod (nginx), backend log-generator showing slow query warnings, frontend log-generator showing processed requests, and kindnet from kube-system. All updating live in a single terminal.*
-
-![Label selector with events](images/image2.png)
-*Left column streams logs from all 6 pods in the zulu deployment via label selector, each line prefixed with the pod identifier. Right column shows the Kubernetes events feed — scheduled, pulled, created, started — as the deployment scaled up from 0 to 6 replicas.*
+*Left column streams logs from all 6 pods in the zulu deployment via label selector, each line prefixed with the pod identifier. Right column shows the Kubernetes events feed: scheduled, pulled, created, started, as the deployment scaled up from 0 to 6 replicas.*
 
 ## Install
 
