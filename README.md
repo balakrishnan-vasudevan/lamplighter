@@ -16,6 +16,7 @@ Build from source:
 git clone https://github.com/balakrishnan-vasudevan/lamplighter.git
 cd lamplighter
 go build -o lamplighter .
+mv lamplighter /usr/local/bin/lamplighter
 ```
 
 Or with `go install`:
@@ -58,7 +59,7 @@ lamplighter default/api-pod --filter "error|warn" --tail 100 --kubeconfig ~/.kub
 |--------|----------------|
 | `namespace/pod-name` | Single pod |
 | `namespace/pod-name:container` | Specific container in a pod |
-| `namespace:selector:label=value` | All pods matching the selector |
+| `namespace:selector:label=value` | All pods matching the selector, live |
 | `namespace:events` | Kubernetes events for the namespace |
 | `namespace:ingress` | Ingress controller logs (auto-discovered) |
 | `namespace:ingress:label=value` | Ingress controller with explicit selector |
@@ -79,6 +80,8 @@ lamplighter default/api-pod --filter "error|warn" --tail 100 --kubeconfig ~/.kub
 | `/` | Search (regex, matches as you type) |
 | `Enter` | Lock search |
 | `Esc` | Clear search |
+| `e` | Export all columns to a timestamped `.log` file |
+| `y` | Copy focused column to clipboard |
 | `?` | Toggle keyboard help |
 | `q` / `Ctrl+C` | Quit |
 
@@ -92,6 +95,7 @@ lamplighter default/api-pod --filter "error|warn" --tail 100 --kubeconfig ~/.kub
 - `○` amber: reconnecting
 - `x` red: dead (press `r` to reconnect)
 - `<` marks the focused column
+- `[PAUSED]` appears when the column display is frozen
 
 ## Log parsing
 
@@ -100,6 +104,19 @@ Plain text logs work as-is. JSON logs are detected automatically. The message, l
 ## Search
 
 Press `/` to open search. Matching lines stay bright, the rest dims. Matches against the display text, the raw log line, all parsed JSON fields, and stack trace lines. Searching for a trace ID finds the right line even if it was buried inside a JSON blob.
+
+## Export and copy
+
+Press `e` to export everything visible to a `lamplighter-<timestamp>.log` file in the current directory. Press `y` to copy the focused column to your system clipboard. The status bar confirms both.
+
+## Label selector streaming
+
+Selector columns watch the namespace for pod changes. When a pod matching the selector is created, a new log stream starts automatically. When a pod is deleted, its stream stops. All pods in a selector column write into the same column, prefixed with the pod name.
+
+```bash
+# Watch all pods in a rolling deploy
+lamplighter default:selector:app=api
+```
 
 ## Architecture
 
@@ -117,9 +134,18 @@ CLI (cobra)
 
 Each column owns a ring buffer (1000 lines). The UI reads a snapshot every 100ms. Streaming goroutines write independently and never block on the UI.
 
-Selector columns run a pod Watch in addition to the log streams. When a pod appears, a new log goroutine starts. When a pod is deleted, its goroutine is cancelled. All pod goroutines write into the same column buffer.
+Selector columns run a pod Watch alongside the log streams. When a pod appears, a new log goroutine starts. When a pod is deleted, its goroutine is cancelled. All pod goroutines write into the same column buffer.
 
 Exponential backoff on stream failure: 1s to 30s, resets on success. After 8 failures the column is marked dead.
+
+## Not yet supported
+
+- No `brew install` — build from source for now
+- No demo mode — a real cluster is required to try it
+- No Deployment or StatefulSet shorthand — you need to know the label selector (`default:selector:app=my-api` rather than `default:deploy:my-api`)
+- No expand-to-columns — a label selector streams all matching pods into one shared column; there is no way to split them into one column per pod side by side
+- No per-pod color coding within a selector column — pods are distinguished by a name prefix only
+- No persistent config file — everything is flags on the command line every time
 
 ## License
 

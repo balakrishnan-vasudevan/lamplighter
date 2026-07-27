@@ -1,9 +1,13 @@
 package ui
 
 import (
+	"fmt"
+	"os"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/balakrishnan-vasudevan/lamplighter/internal/buffer"
@@ -38,6 +42,10 @@ type Model struct {
 	searchMode  bool
 	searchQuery string
 	searchRegex *regexp.Regexp
+
+	// transient status message (export/copy confirmation)
+	statusMsg    string
+	statusExpiry time.Time
 }
 
 func New(cols []*column.Column, mgr *stream.Manager) *Model {
@@ -58,6 +66,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tickMsg:
 		m.refreshSnapshots()
+		if !m.statusExpiry.IsZero() && time.Now().After(m.statusExpiry) {
+			m.statusMsg = ""
+			m.statusExpiry = time.Time{}
+		}
 		return m, tick()
 
 	case tea.WindowSizeMsg:
@@ -163,9 +175,77 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyGotoLive:
 		m.liveMode = true
 		m.viewTime = time.Time{}
+
+	case keyExport:
+		if msg, err := m.exportToFile(); err == nil {
+			m.setStatus(msg)
+		} else {
+			m.setStatus("export failed: " + err.Error())
+		}
+
+	case keyCopy:
+		if len(m.columns) > 0 {
+			if err := m.copyToClipboard(m.cursor); err == nil {
+				m.setStatus("copied to clipboard")
+			} else {
+				m.setStatus("clipboard unavailable")
+			}
+		}
 	}
 
 	return m, nil
+}
+
+func (m *Model) setStatus(msg string) {
+	m.statusMsg = msg
+	m.statusExpiry = time.Now().Add(3 * time.Second)
+}
+
+func (m *Model) exportToFile() (string, error) {
+	name := "lamplighter-" + time.Now().Format("2006-01-02-150405") + ".log"
+	f, err := os.Create(name)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	for i, col := range m.columns {
+		fmt.Fprintf(f, "=== %s ===\n", col.Header())
+		for _, line := range m.snapshots[i] {
+			if line.Text == "" && line.Timestamp.IsZero() {
+				continue
+			}
+			ts := ""
+			if !line.Timestamp.IsZero() {
+				ts = line.Timestamp.Format("15:04:05 ")
+			}
+			fmt.Fprintf(f, "%s%s\n", ts, line.Text)
+			for _, extra := range line.Extra {
+				fmt.Fprintln(f, extra)
+			}
+		}
+		fmt.Fprintln(f)
+	}
+
+	return "exported to " + name, nil
+}
+
+func (m *Model) copyToClipboard(idx int) error {
+	var sb strings.Builder
+	for _, line := range m.snapshots[idx] {
+		if line.Text == "" && line.Timestamp.IsZero() {
+			continue
+		}
+		ts := ""
+		if !line.Timestamp.IsZero() {
+			ts = line.Timestamp.Format("15:04:05 ")
+		}
+		sb.WriteString(ts + line.Text + "\n")
+		for _, extra := range line.Extra {
+			sb.WriteString(extra + "\n")
+		}
+	}
+	return clipboard.WriteAll(sb.String())
 }
 
 func (m *Model) updateSearchRegex() {

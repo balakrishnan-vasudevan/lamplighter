@@ -1,3 +1,4 @@
 lamplighter
 dist/
 *.test
+lamplighter-*.log

@@ -206,17 +206,20 @@ func (m *Model) statusBar() string {
 		leftStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#d29922")).Bold(true)
 	}
 
-	// Right: search indicator
+	// Right: transient status message, search indicator, or hint
 	var rightText string
 	var rightStyle lipgloss.Style
-	if m.searchMode {
+	if m.statusMsg != "" {
+		rightText = m.statusMsg
+		rightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3fb950"))
+	} else if m.searchMode {
 		rightText = "/ " + m.searchQuery + "█"
 		rightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#58a6ff"))
 	} else if m.searchRegex != nil {
 		rightText = "/ " + m.searchQuery + "  Esc clear"
 		rightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#58a6ff"))
 	} else {
-		rightText = "/ search  ? help  q quit"
+		rightText = "/ search  e export  y copy  ? help  q quit"
 		rightStyle = styleDim
 	}
 
@@ -264,6 +267,9 @@ func helpView() string {
 		"              matching lines stay bright, rest dims",
 		"  Enter       lock search and close input",
 		"  Esc         clear search",
+		"",
+		"  e           export all columns to a timestamped .log file",
+		"  y           copy focused column to clipboard",
 		"",
 		"  ?           toggle this help",
 		"  q / Ctrl+C  quit",

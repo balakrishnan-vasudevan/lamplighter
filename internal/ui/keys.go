@@ -18,9 +18,13 @@ const (
 	keyGotoLive  = "G"
 
 	// search
-	keySearch    = "/"
-	keyEnter     = "enter"
-	keyEsc       = "esc"
-	keyBackspace = "backspace"
-	keyBackspace2 = "ctrl+h" // some terminals send this
+	keySearch     = "/"
+	keyEnter      = "enter"
+	keyEsc        = "esc"
+	keyBackspace  = "backspace"
+	keyBackspace2 = "ctrl+h"
+
+	// export / clipboard
+	keyExport = "e"
+	keyCopy   = "y"
 )
